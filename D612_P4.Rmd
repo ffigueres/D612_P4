@@ -1,0 +1,154 @@
+---
+title: "DATA-612, Project 4"
+author: "Fernando Figueres"
+output: html_notebook
+---
+
+In this project we'll compare two recommnedation algorithms using the Movie Lens dataset.  
+
+# Data Preparation
+
+```{r Library, message=FALSE, warning=FALSE}
+library(recommenderlab)
+library(tidyverse)
+
+# https://github.com/nicolastorresr/diversity
+
+source('diversity\\R\\AAA.R')
+source('diversity\\R\\calcPredictionAccuracy.R')
+source('diversity\\R\\alpha_Measures.R')
+source('diversity\\R\\BinomDiv.R')
+source('diversity\\R\\evaluate.R')
+```
+
+
+```{r}
+# Increase the density of the data
+set.seed(1)
+data(MovieLense)
+mratings <- MovieLense[rowCounts(MovieLense) > 100, colCounts(MovieLense) > 100]
+mratings
+```
+
+
+```{r}
+
+# Define the evaluation parameters
+eval_sets <-
+  evaluationScheme(
+    data = mratings,
+    method = 'cross-validation',
+    given = min(rowCounts(mratings)),
+    goodRating = 4, #rating_threshold
+    k = 10, n_fold
+  )
+eval_sets
+```
+
+
+# Model Selection
+
+```{r}
+list(name = "IBCF", param = list(k = 20))
+```
+
+
+```{r}
+models_to_evaluate <- list(
+  IBCF_cos = list(name = "IBCF", param = list(method = "cosine")),
+  IBCF_cor = list(name = "IBCF", param = list(method = "pearson")),
+  UBCF_cos = list(name = "UBCF", param = list(method = "cosine")),
+  UBCF_cor = list(name = "UBCF", param = list(method = "pearson")),
+  random = list(name = "RANDOM", param=NULL)
+)
+```
+
+
+```{r}
+n_recommendations <- c(1, 5, seq(10, 100, 10))
+```
+
+
+```{r}
+list_results <- evaluate(x = eval_sets, method = models_to_evaluate, n = n_recommendations)
+class(list_results)
+```
+
+
+```{r}
+sapply(list_results, class) == "evaluationResults"
+```
+
+```{r}
+avg_matrices <- lapply(list_results, avg)
+```
+
+```{r}
+head(avg_matrices$IBCF_cos[, 5:8])
+```
+
+```{r}
+plot(list_results, annotate = 1, legend = "topleft")+ title("ROC curve")
+```
+
+
+```{r}
+plot(list_results, "prec/rec", annotate = 1, legend = "bottomright") + title("Precision-recall")
+```
+
+
+
+```{r}
+vector_k <- c(5, 10, 20, 30, 40)
+models_to_evaluate <- lapply(vector_k, function(k) {
+  list(name = "IBCF", param = list(method = "cosine", k = k))
+})
+
+names(models_to_evaluate) <- paste0("IBCF_k_", vector_k)
+# Using the same commands as we did earlier, let's build and evaluate the models:
+n_recommendations <- c(1, 5, seq(10, 100, 10))
+list_results <-
+  evaluate(x = eval_sets, method = models_to_evaluate, n = n_recommendations)
+```
+
+```{r}
+plot(list_results, annotate = 1, legend = "topleft") + title("ROC curve")
+```
+
+
+```{r fig.height=6, fig.width=6}
+plot(list_results, "prec/rec", ylim = c(0.16,0.25), annotate = 1, legend = "topright")
+title("Precision-recall")
+```
+
+
+
+# Model Extension
+
+```{r}
+r <- evaluate(eval_sets, method = "UBCF", nMatrix = "diversity/nuggets/Nuggets_ML100K.dat", type = "topNList", 
+                subtype = "BinomDiv", n = 10, param = list(method = "cosine", nn = 50))
+```
+
+
+
+```{r}
+avg(r)
+```
+
+
+# Conclusions
+
+In the context of a website, recommendations systems should be gauged similarly to other content and advertisements. That it, metrics such as CTR and conversion rates can start to give us an idea of whether or not live customers find the recommendations useful and appealing (Řehořek, 2016). 
+
+
+References:
+
+Gorakala, S. K., & Usuelli, M. (2015). Building a recommendation system with R. Retrieved from https://learning.oreilly.com/library/view/building-a-recommendation/9781783554492/
+
+Mendoza, M., & Torres, N. (2019). Evaluating content novelty in recommender systems. Journal of Intelligent Information Systems, 1–20. https://doi.org/10.1007/s10844-019-00548-x
+
+Vargas, S., Baltrunas, L., Karatzoglou, A., & Castells, P. (n.d.). Coverage, Redundancy and Size-Awareness in Genre Diversity for Recommender Systems. https://doi.org/10.1145/2645710.2645743
+
+Řehořek, T. (2016). Evaluating Recommender Systems: Choosing the best one for your business. Retrieved July 3, 2019, from Recombee website: https://medium.com/recombee-blog/evaluating-recommender-systems-choosing-the-best-one-for-your-business-c688ab781a35
+
